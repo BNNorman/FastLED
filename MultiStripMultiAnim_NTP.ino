@@ -4,15 +4,14 @@
  * 
  * based (a lot) on the FastLED DemoReel100 example
  * 
- *
  * 
  */
  # include <NTPClient.h>
  #include <ESP8266WiFi.h>
  #include <WiFiUdp.h>
 
-const char *ssid     = "<SSID>";
-const char *password = "<PASSWORD>";
+const char *ssid     = "<YOUR SSID>";
+const char *password = "<YOUR PASSWORD>";
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP);
@@ -41,6 +40,7 @@ FASTLED_USING_NAMESPACE
 #define NUM_STRIPS 4
 CRGB leds[NUM_STRIPS][NUM_LEDS];
 CLEDController *strip[NUM_STRIPS]; // each strip has a different controller
+bool ledsOn=false;
 
 #define BRIGHTNESS          96
 #define FRAMES_PER_SECOND  120
@@ -67,15 +67,16 @@ void setup() {
     }
 
   // show that we connected ok
+    Serial.print("D4 ="); Serial.println(D4);
+  Serial.print("LED_BUILTIN ="); Serial.println(LED_BUILTIN);
   digitalWrite(LED_BUILTIN,HIGH);
 
   timeClient.begin();
-  timeClient.update();
+  timeClient.forceUpdate();
 
   Serial.print("\nTime client updated Hour="); Serial.println(timeClient.getHours());
   
-  delay(3000); // 3 second delay for recovery (may not be necessary - kept from original example)
-  
+
   // tell FastLED about the LED strip configuration
   strip[0]=&FastLED.addLeds<LED_TYPE,DATA_PIN1,COLOR_ORDER>(leds[0],NUM_LEDS).setCorrection(TypicalLEDStrip);
   strip[1]=&FastLED.addLeds<LED_TYPE,DATA_PIN2,COLOR_ORDER>(leds[1],NUM_LEDS).setCorrection(TypicalLEDStrip);
@@ -83,8 +84,25 @@ void setup() {
   strip[3]=&FastLED.addLeds<LED_TYPE,DATA_PIN4,COLOR_ORDER>(leds[3],NUM_LEDS).setCorrection(TypicalLEDStrip);
 
   // set master brightness control
-  // this will be dimmed 'out side of hours'
   FastLED.setBrightness(BRIGHTNESS);
+
+  // show we have started ok
+  // also confirms all LEDs are working
+  for (uint8_t thisStrip=0;thisStrip<NUM_STRIPS;thisStrip++){
+          fill_solid(leds[thisStrip],NUM_LEDS,CRGB(255,255,255));
+  }
+  FastLED.show();
+  delay(500);
+
+  for (uint8_t thisStrip=0;thisStrip<NUM_STRIPS;thisStrip++){
+          fill_solid(leds[thisStrip],NUM_LEDS,CRGB(0,0,0));
+  }
+  FastLED.show();
+
+  ledsOn=false;
+
+  Serial.println("Running");
+
 }
 
 
@@ -92,27 +110,37 @@ void setup() {
 // I guess this could be an array of groups of patterns so you could cycle through
 // different patttern sets on each strip
 
-typedef void (*SimplePatternList[])();
-SimplePatternList gPatterns = { rainbow, confetti,rainbowWithGlitter,  sinelon, juggle, bpm };
+void rainbow();
+void confetti();
+void blackWithGlitter();
+void rainbowWithGlitter();
+void sinelon();
+void juggle();
+void bpm();
 
-// start pattern to display on each strip first
+typedef void (*SimplePatternList[])();
+
+// blackWithGlitter added 4 times so that the patterm will switch from strip to strip
+SimplePatternList gPatterns = { rainbow, confetti,rainbowWithGlitter,  sinelon, blackWithGlitter, blackWithGlitter, blackWithGlitter, blackWithGlitter,juggle, bpm };
+
+// start pattern (index) to display on each strip first
 uint8_t stripPattern[NUM_STRIPS]={0,1,2,3};
 
 uint8_t gHue = 0; // rotating "base color" used by many of the patterns
 
-bool ledsOn=true;
 
 void loop()
 {
   timeClient.update();
+
+  uint8_t now=timeClient.getHours();
   
   // only run the sketch between fixed hours
-  if ( (timeClient.getHours()<ANIM_START_HOUR) || (timeClient.getHours()>ANIM_END_HOUR)) {
+  if ( (now<=ANIM_START_HOUR) || (now>=ANIM_END_HOUR)) {
         if (ledsOn){
-        Serial.println("Turning off the Leds");
-        for (uint8_t ctrl=0;ctrl<NUM_STRIPS;ctrl++){
-          gPatterns[stripPattern[ctrl]]();
-          fadeToBlackBy( leds[ctrl], NUM_LEDS, 10);
+        Serial.print("Turning off the Leds at hour="); Serial.println(now);
+        for (uint8_t thisStrip=0;thisStrip<NUM_STRIPS;thisStrip++){
+          fill_solid(leds[thisStrip],NUM_LEDS,CRGB(0,0,0));
         }
         ledsOn=false;
         }
@@ -120,13 +148,13 @@ void loop()
    else {
     if (!ledsOn){
       ledsOn=true;
-      Serial.println("Switching leds back on");
+      Serial.print("Switching leds back on at hour="); Serial.println(now);
     }
     // Call the current pattern function once, updating the respective 'leds' array
   
-    for (uint8_t ctrl=0;ctrl<NUM_STRIPS;ctrl++){
-        curStrip=ctrl; // selects the led array in the animations
-        gPatterns[stripPattern[ctrl]]();
+    for (uint8_t thisStrip=0;thisStrip<NUM_STRIPS;thisStrip++){
+        curStrip=thisStrip; // selects the led array in the animations
+        gPatterns[stripPattern[thisStrip]]();
       }
     }
 
@@ -142,9 +170,9 @@ void loop()
 void nextPattern()
 {
   // add one to the current pattern number for each strip, and wrap around at the end
-  for (uint8_t c=0;c<NUM_STRIPS;c++)
+  for (uint8_t thisStrip=0;thisStrip<NUM_STRIPS;thisStrip++)
     {
-    stripPattern[c]=(stripPattern[c] + 1) % ARRAY_SIZE( gPatterns);
+    stripPattern[thisStrip]=(stripPattern[thisStrip] + 1) % ARRAY_SIZE( gPatterns);
     }
 }
 
@@ -168,6 +196,13 @@ void rainbowWithGlitter()
   addGlitter(80);
 }
 
+void blackWithGlitter() 
+{
+  // built-in FastLED rainbow, plus some random sparkly glitter
+  fill_solid(leds[curStrip],NUM_LEDS,CRGB(0,0,0));
+  addGlitter(80);
+}
+
 void addGlitter( fract8 chanceOfGlitter) 
 {
   if( random8() < chanceOfGlitter) {
@@ -181,6 +216,7 @@ void confetti()
   fadeToBlackBy( leds[curStrip], NUM_LEDS, 10);
   int pos = random16(NUM_LEDS);
   leds[curStrip][pos] += CHSV( gHue + random8(64), 200, 255);
+  addGlitter(80);
 }
 
 void sinelon()
@@ -189,6 +225,7 @@ void sinelon()
   fadeToBlackBy( leds[curStrip], NUM_LEDS, 20);
   int pos = beatsin16( 13, 0, NUM_LEDS-1 );
   leds[curStrip][pos] += CHSV( gHue, 255, 192);
+  addGlitter(80);
 }
 
 void bpm()
@@ -200,6 +237,7 @@ void bpm()
   for( int i = 0; i < NUM_LEDS; i++) { //9948
     leds[curStrip][i] = ColorFromPalette(palette, gHue+(i*2), beat-gHue+(i*10));
   }
+    addGlitter(80);
 }
 
 void juggle() {
@@ -210,4 +248,5 @@ void juggle() {
     leds[curStrip][beatsin16( i+7, 0, NUM_LEDS-1 )] |= CHSV(dothue, 200, 255);
     dothue += 32;
   }
+    addGlitter(80);
 }
