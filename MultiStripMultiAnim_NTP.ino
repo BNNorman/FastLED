@@ -136,33 +136,48 @@ void loop()
   uint8_t now=timeClient.getHours();
   
   // only run the sketch between fixed hours
-  if ( (now<=ANIM_START_HOUR) || (now>=ANIM_END_HOUR)) {
+  Serial.print("Led status "); Serial.println(ledsOn);
+  
+  if ( (now<ANIM_START_HOUR) || (now>=ANIM_END_HOUR)) {
+      Serial.println("Out of hours");
         if (ledsOn){
-        Serial.print("Turning off the Leds at hour="); Serial.println(now);
-        for (uint8_t thisStrip=0;thisStrip<NUM_STRIPS;thisStrip++){
-          fill_solid(leds[thisStrip],NUM_LEDS,CRGB(0,0,0));
-        }
-        ledsOn=false;
+          ledsOn=false;
+          Serial.print("Turning off the Leds at hour="); Serial.println(now);
+          for (uint8_t thisStrip=0;thisStrip<NUM_STRIPS;thisStrip++){
+            fill_solid(leds[thisStrip],NUM_LEDS,CRGB(0,0,0));
+          }
         }
    }
    else {
+    Serial.println("On hours");
     if (!ledsOn){
+      
       ledsOn=true;
       Serial.print("Switching leds back on at hour="); Serial.println(now);
+      for (uint8_t thisStrip=0;thisStrip<NUM_STRIPS;thisStrip++){
+          fill_solid(leds[thisStrip],NUM_LEDS,CRGB(255,255,255));
+          stripPattern[thisStrip]=thisStrip;  // staggered andimation
+        }
+      
+      gHue=0;
     }
+    
     // Call the current pattern function once, updating the respective 'leds' array
   
     for (uint8_t thisStrip=0;thisStrip<NUM_STRIPS;thisStrip++){
         curStrip=thisStrip; // selects the led array in the animations
         gPatterns[stripPattern[thisStrip]]();
       }
+      
     }
 
    FastLED.show();
    FastLED.delay(1000/FRAMES_PER_SECOND);
   // do some periodic updates
-  EVERY_N_MILLISECONDS( 20 ) { gHue++; }  // slowly cycle the "base color" through the rainbow
-  EVERY_N_SECONDS( 10 ) { nextPattern(); } // change patterns periodically
+  if (ledsOn){
+    EVERY_N_MILLISECONDS( 20 ) { gHue++; }    // slowly cycle the "base color" through the rainbow
+    EVERY_N_SECONDS( 10 ) { nextPattern(); }  // change patterns periodically
+  }
 }
 
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
