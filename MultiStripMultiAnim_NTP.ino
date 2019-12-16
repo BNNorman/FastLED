@@ -12,6 +12,9 @@
 
 const char *ssid     = "<YOUR SSID>";
 const char *password = "<YOUR PASSWORD>";
+IPAddress staticIP(192,168,1,91);
+IPAddress gateway(192,168,1,1);
+IPAddress subnet(255,255,255,0);
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP);
@@ -43,7 +46,7 @@ CLEDController *strip[NUM_STRIPS]; // each strip has a different controller
 bool ledsOn=false;
 
 #define BRIGHTNESS          96
-#define FRAMES_PER_SECOND  120
+#define FRAMES_PER_SECOND   30
 
 // used by animation methods so they know which strip they are working on
 uint8_t curStrip=0;
@@ -56,27 +59,38 @@ uint8_t curStrip=0;
 // connect to WiFi and init NTP, add the leds to FastLED
 
 void setup() {
-  Serial.begin(115200);
+ Serial.begin(115200);
 
-  uint8_t led_state=1;
-   while ( WiFi.status() != WL_CONNECTED ) {
-    delay ( 500 );
-    digitalWrite(LED_BUILTIN,led_state);
-    led_state=~led_state;
-    Serial.print ( "." );
+  // establish a wifi connection
+  if (!WiFi.config(staticIP, gateway, subnet,gateway,gateway))
+    {
+      Serial.println("Unable to configure WiFi");
+      while(1) ;
     }
+  WiFi.begin(ssid, password);
 
-  // show that we connected ok
-    Serial.print("D4 ="); Serial.println(D4);
-  Serial.print("LED_BUILTIN ="); Serial.println(LED_BUILTIN);
-  digitalWrite(LED_BUILTIN,HIGH);
+  uint8_t lineBreak=0;
+  while ( WiFi.status() != WL_CONNECTED ) {
+    delay ( 500 );
+    Serial.print ( "." );
+    lineBreak=(lineBreak+1)%40;
+    if (lineBreak==0) Serial.println("");
+  }
+
+  Serial.print("\nWiFi connected, IP address: "); Serial.println(WiFi.localIP());
+  Serial.print("DNS #1, #2 IP: ");
+  WiFi.dnsIP().printTo(Serial);
+  Serial.print(", ");
+  WiFi.dnsIP(1).printTo(Serial);
+  Serial.println();
+  
+  WiFi.setAutoConnect(true);
 
   timeClient.begin();
   timeClient.forceUpdate();
 
   Serial.print("\nTime client updated Hour="); Serial.println(timeClient.getHours());
   
-
   // tell FastLED about the LED strip configuration
   strip[0]=&FastLED.addLeds<LED_TYPE,DATA_PIN1,COLOR_ORDER>(leds[0],NUM_LEDS).setCorrection(TypicalLEDStrip);
   strip[1]=&FastLED.addLeds<LED_TYPE,DATA_PIN2,COLOR_ORDER>(leds[1],NUM_LEDS).setCorrection(TypicalLEDStrip);
@@ -102,7 +116,6 @@ void setup() {
   ledsOn=false;
 
   Serial.println("Running");
-
 }
 
 
@@ -134,12 +147,13 @@ void loop()
   timeClient.update();
 
   uint8_t now=timeClient.getHours();
+  Serial.print("Now-Hours="); Serial.println(now);
   
   // only run the sketch between fixed hours
-  Serial.print("Led status "); Serial.println(ledsOn);
+  //Serial.print("Led status "); Serial.println(ledsOn);
   
   if ( (now<ANIM_START_HOUR) || (now>=ANIM_END_HOUR)) {
-      Serial.println("Out of hours");
+      //Serial.println("Out of hours");
         if (ledsOn){
           ledsOn=false;
           Serial.print("Turning off the Leds at hour="); Serial.println(now);
@@ -149,7 +163,7 @@ void loop()
         }
    }
    else {
-    Serial.println("On hours");
+    //Serial.println("On hours");
     if (!ledsOn){
       
       ledsOn=true;
@@ -264,4 +278,30 @@ void juggle() {
     dothue += 32;
   }
     addGlitter(80);
+}
+
+void CheckWifi(const char *ssid) {
+  Serial.println("scan start");
+
+  // WiFi.scanNetworks will return the number of networks found
+  int n = WiFi.scanNetworks();
+  Serial.println("scan done");
+  if (n == 0) {
+    Serial.println("no networks found");
+  } else {
+    Serial.print(n);
+    Serial.println(" networks found");
+    for (int i = 0; i < n; ++i) {
+      // Print SSID and RSSI for each network found
+      Serial.print(i + 1);
+      Serial.print(": ");
+      Serial.print(WiFi.SSID(i));
+      Serial.print(" (");
+      Serial.print(WiFi.RSSI(i));
+      Serial.print(")");
+      Serial.println((WiFi.encryptionType(i) == ENC_TYPE_NONE) ? " " : "*");
+      delay(10);
+    }
+  }
+  Serial.println("");
 }
